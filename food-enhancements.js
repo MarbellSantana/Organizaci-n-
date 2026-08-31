@@ -15,3 +15,24 @@
   function boot(){style();ensureRecipeButton();mealCalendarShell();ensureFoodDashboard();const obs=new MutationObserver(()=>{ensureRecipeButton();mealCalendarShell();ensureFoodDashboard()});obs.observe(document.body,{childList:true,subtree:true});document.addEventListener('click',e=>{const b=e.target.closest('[data-screen]');if(b?.dataset.screen==='estadisticas')setTimeout(renderFoodStats,300)});}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,1000));else setTimeout(boot,1000);
 })();
+
+/* Despensa: acceso visible y conectado al formulario existente */
+(function(){
+  function setupPantry(){
+    const section=document.getElementById('casa');
+    const list=document.getElementById('pantryList');
+    if(!section||!list||document.getElementById('addPantryItem')) return;
+    const head=section.querySelector('.head');
+    if(!head)return;
+    const btn=document.createElement('button');
+    btn.id='addPantryItem';btn.type='button';btn.className='primary';btn.textContent='＋ Agregar ingrediente';
+    btn.addEventListener('click',()=>{if(typeof window.openHome==='function')window.openHome();else if(typeof window.toast==='function')window.toast('No se pudo abrir el formulario. Recarga la página.')});
+    head.appendChild(btn);
+    const hint=document.createElement('div');hint.className='pantry-hint';
+    hint.innerHTML='<b>🥫 Tu despensa</b><span>Agrega lo que tienes en casa y lo usaremos para darte ideas de comidas.</span>';
+    section.insertBefore(hint,list);
+    const style=document.createElement('style');style.textContent='.pantry-hint{background:#fff;border:1px solid #f0dfe5;border-radius:18px;padding:16px 18px;margin:0 0 18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pantry-hint b{color:#6b4d59}.pantry-hint span{color:#987a85;font-size:13px}@media(max-width:600px){#addPantryItem{width:100%}}';document.head.appendChild(style);
+  }
+  function boot(){setupPantry();setTimeout(setupPantry,500);setTimeout(setupPantry,1500)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+})();
