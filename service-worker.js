@@ -1,5 +1,5 @@
-const CACHE='organizacion-v2';
-const CORE=['./','./index.html','./styles.css','./app.js','./enhancements.js','./organization-v2.js','./auth.js','./manifest.json','./icon-192.svg','./icon-512.svg','./recipes-calendar.js'];
+const CACHE='organizacion-v3';
+const CORE=['./','./index.html','./styles.css','./app.js','./enhancements.js','./organization-v2.js','./auth.js','./food-enhancements.js','./manifest.json','./icon-192.svg','./icon-512.svg','./recipes-calendar.js'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith((async()=>{try{const r=await fetch(e.request);if(e.request.mode==='navigate'){const text=await r.text();if(!text.includes('recipes-calendar.js')){const patched=text.replace('</body>','<script defer src="./recipes-calendar.js?v=2"></script></body>');return new Response(patched,{status:r.status,statusText:r.statusText,headers:{'Content-Type':'text/html; charset=utf-8'}})}}const c=await caches.open(CACHE);c.put(e.request,r.clone());return r}catch(err){return caches.match(e.request).then(r=>r||caches.match('./index.html'))}})()});
