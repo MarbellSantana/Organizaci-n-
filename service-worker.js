@@ -1,4 +1,4 @@
-const CACHE='organizacion-v3';
+const CACHE='organizacion-v4';
 const CORE=['./','./index.html','./styles.css','./app.js','./enhancements.js','./organization-v2.js','./auth.js','./food-enhancements.js','./manifest.json','./icon-192.svg','./icon-512.svg','./recipes-calendar.js'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
