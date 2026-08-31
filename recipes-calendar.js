@@ -1,55 +1,13 @@
-/* Recetas + calendario mensual de comidas */
+/* Recetas y calendario mensual */
 (function(){
-  const escR=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
-  const catLabels={desayuno:'☀️ Desayuno',almuerzo:'🍝 Almuerzo',merienda:'🥪 Merienda',cena:'🌙 Cena'};
-  function recipeForm(){
-    modal(`<h2>Agregar receta 🍳</h2>
-      <div class="field"><label>NOMBRE</label><input id="rName" placeholder="Ej. Pastel de papa"></div>
-      <div class="field"><label>CATEGORÍA</label><select id="rCat"><option value="desayuno">☀️ Desayuno</option><option value="almuerzo">🍝 Almuerzo</option><option value="merienda">🥪 Merienda</option><option value="cena">🌙 Cena</option><option value="jugos">🍓 Jugos</option></select></div>
-      <div class="field"><label>INGREDIENTES</label><textarea id="rIngredients" rows="5" placeholder="Papa - 500 g\nCarne - 300 g\nCebolla - 1"></textarea><small>Escribe un ingrediente por línea. Puedes poner cantidad después de un guion.</small></div>
-      <div class="field"><label>PREPARACIÓN</label><textarea id="rPrep" rows="5" placeholder="Describe cómo preparar la receta..."></textarea></div>
-      <button type="button" class="primary full" id="saveNewRecipe">Guardar receta ♡</button>`);
-    document.querySelector('#saveNewRecipe').onclick=saveRecipe;
-  }
-  async function saveRecipe(){
-    if(!window.db)return toast('Supabase no está disponible');
-    const name=document.querySelector('#rName')?.value.trim(); if(!name)return toast('Escribe el nombre de la receta');
-    const category=document.querySelector('#rCat').value;
-    const preparation=document.querySelector('#rPrep').value.trim();
-    const lines=document.querySelector('#rIngredients').value.split('\n').map(x=>x.trim()).filter(Boolean);
-    const ingredients=lines.map(line=>{const p=line.split(/\s+-\s+/);return {ingredient_name:p[0].trim(),quantity:p.slice(1).join(' - ').trim()||null}});
-    const rr=await window.db.from('recipes').insert({name,category,preparation}).select().single();
-    if(rr.error)return toast(rr.error.message);
-    if(ingredients.length){const ri=await window.db.from('recipe_ingredients').insert(ingredients.map(x=>({...x,recipe_id:rr.data.id})));if(ri.error){await window.db.from('recipes').delete().eq('id',rr.data.id);return toast(ri.error.message)}}
-    const fresh=await window.db.from('recipes').select('*,recipe_ingredients(*)').eq('id',rr.data.id).single();
-    if(!fresh.error)window.data.recipes.push(fresh.data); else window.data.recipes.push({...rr.data,recipe_ingredients:ingredients});
-    closeModal();renderRecipes(category);renderSuggestions();updateHomeStats();toast('Receta guardada 🍳');
-  }
-  window.openRecipeForm=recipeForm;
-
-  function renderCalendar(){
-    const section=document.querySelector('#comidas');if(!section)return;
-    const old=document.querySelector('#mealCalendar');if(old)old.remove();
-    const panel=section.querySelector('.panel'); if(!panel)return;
-    const list=window.mealLogData||[];
-    const now=new Date(); let year=window.mealCalYear??now.getFullYear(), month=window.mealCalMonth??now.getMonth();
-    const first=new Date(year,month,1), days=new Date(year,month+1,0).getDate(), start=(first.getDay()+6)%7;
-    const map={};list.forEach(x=>{if(String(x.meal_date).slice(0,7)===`${year}-${String(month+1).padStart(2,'0')}`)(map[x.meal_date]??=[]).push(x)});
-    const box=document.createElement('div');box.id='mealCalendar';box.className='panel';
-    let html=`<div class="calendar-head"><button type="button" class="secondary" id="calPrev">‹</button><h2>${first.toLocaleDateString('es-AR',{month:'long',year:'numeric'})}</h2><button type="button" class="secondary" id="calNext">›</button></div><div class="calendar-grid weekdays">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(x=>`<b>${x}</b>`).join('')}</div><div class="calendar-grid">`;
-    for(let i=0;i<start;i++)html+='<div class="cal-day empty-day"></div>';
-    for(let d=1;d<=days;d++){const key=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`, meals=map[key]||[];html+=`<div class="cal-day"><strong>${d}</strong>${meals.slice(0,4).map(x=>`<div class="cal-meal" title="${escR(x.meal_name)}">${catLabels[x.meal_type]||x.meal_type}: ${escR(x.meal_name)}</div>`).join('')}${meals.length>4?`<small>+${meals.length-4} más</small>`:''}</div>`}
-    html+='</div><p class="calendar-note">Cada día muestra lo que registraste como comido. 🌸</p>';
-    box.innerHTML=html; panel.parentNode.insertBefore(box,panel);
-    box.querySelector('#calPrev').onclick=()=>{month--;if(month<0){month=11;year--}window.mealCalMonth=month;window.mealCalYear=year;renderCalendar()};
-    box.querySelector('#calNext').onclick=()=>{month++;if(month>11){month=0;year++}window.mealCalMonth=month;window.mealCalYear=year;renderCalendar()};
-  }
-  window.renderMealCalendar=renderCalendar;
-  const oldRender=window.renderMealLog;
-  document.addEventListener('DOMContentLoaded',()=>{
-    const add=document.querySelector('#addRecipe');if(add)add.onclick=recipeForm;
-    const comidas=document.querySelector('[data-screen="comidas"]');if(comidas)comidas.addEventListener('click',()=>setTimeout(renderCalendar,100));
-    setTimeout(()=>{if(document.querySelector('#comidas.screen.active'))renderCalendar()},1200);
-  });
-  const wait=setInterval(()=>{if(window.mealLogData!==undefined){clearInterval(wait);const orig=window.renderMealLog;if(typeof orig==='function')window.renderMealLog=function(){orig();renderCalendar()};renderCalendar()}},300);
+const URL='https://evmqqjtglapwnezbttds.supabase.co',KEY='sb_publishable_bri9jNvVFIyaynVhOHvBGA_9u4u527w';
+const client=()=>window.supabase?.createClient(URL,KEY);
+const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+function msg(t){const e=document.querySelector('#toast');if(e){e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2200)}}
+function openRecipe(){const m=document.querySelector('#modal'),b=document.querySelector('#modalBody');if(!m||!b)return;b.innerHTML=`<h2>Agregar receta 🍳</h2><div class="field"><label>NOMBRE</label><input id="newRName" placeholder="Ej. Pastel de papa"></div><div class="field"><label>CATEGORÍA</label><select id="newRCat"><option value="desayuno">☀️ Desayuno</option><option value="almuerzo">🍝 Almuerzo</option><option value="merienda">🥪 Merienda</option><option value="cena">🌙 Cena</option><option value="jugos">🍓 Jugos</option></select></div><div class="field"><label>INGREDIENTES</label><textarea id="newRIng" rows="6" placeholder="Papa - 500 g\nCarne - 300 g\nCebolla - 1"></textarea><small>Un ingrediente por línea. La cantidad es opcional.</small></div><div class="field"><label>PREPARACIÓN</label><textarea id="newRPrep" rows="6" placeholder="Escribe aquí los pasos..."></textarea></div><button class="primary full" id="saveRecipeNow" type="button">Guardar receta ♡</button>`;m.classList.add('show');document.querySelector('#saveRecipeNow').onclick=saveRecipe}
+async function saveRecipe(){const db=client();if(!db)return msg('No se pudo conectar');const name=document.querySelector('#newRName')?.value.trim();if(!name)return msg('Escribe el nombre');const category=document.querySelector('#newRCat').value;const preparation=document.querySelector('#newRPrep').value.trim();const ingredients=document.querySelector('#newRIng').value.split('\n').map(x=>x.trim()).filter(Boolean).map(x=>{const p=x.split(/\s+-\s+/);return {ingredient_name:p[0].trim(),quantity:p.slice(1).join(' - ').trim()||null}});const r=await db.from('recipes').insert({name,category,preparation}).select().single();if(r.error)return msg(r.error.message);if(ingredients.length){const ri=await db.from('recipe_ingredients').insert(ingredients.map(x=>({...x,recipe_id:r.data.id})));if(ri.error){await db.from('recipes').delete().eq('id',r.data.id);return msg(ri.error.message)}}document.querySelector('#modal')?.classList.remove('show');msg('Receta guardada 🍳');setTimeout(()=>location.reload(),400)}
+function calendarBox(){let box=document.querySelector('#mealCalendar');if(!box){const s=document.querySelector('#comidas');if(!s)return;box=document.createElement('div');box.id='mealCalendar';box.className='panel';s.querySelector('.panel')?.before(box)}return box}
+async function renderCalendar(){const box=calendarBox();if(!box)return;const db=client();if(!db)return;const now=new Date();let y=window.__mealY??now.getFullYear(),m=window.__mealM??now.getMonth();const first=new Date(y,m,1),days=new Date(y,m+1,0).getDate(),start=(first.getDay()+6)%7;const from=`${y}-${String(m+1).padStart(2,'0')}-01`,to=new Date(y,m+1,1).toISOString().slice(0,10);const r=await db.from('meal_log').select('*').gte('meal_date',from).lt('meal_date',to).order('meal_date').order('meal_type');const rows=r.error?[]:(r.data||[]),by={};rows.forEach(x=>(by[x.meal_date]??=[]).push(x));const labels={desayuno:'☀️',almuerzo:'🍝',merienda:'🥪',cena:'🌙'};let h=`<div class="calendar-head"><button type="button" class="secondary" id="mealPrev">‹</button><h2>${first.toLocaleDateString('es-AR',{month:'long',year:'numeric'})}</h2><button type="button" class="secondary" id="mealNext">›</button></div><div class="calendar-grid weekdays">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d=>`<b>${d}</b>`).join('')}</div><div class="calendar-grid">`;for(let i=0;i<start;i++)h+='<div class="cal-day empty-day"></div>';for(let d=1;d<=days;d++){const key=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;h+=`<div class="cal-day"><strong>${d}</strong>${(by[key]||[]).map(x=>`<div class="cal-meal">${labels[x.meal_type]||'🍽️'} ${esc(x.meal_name)}<small>${x.person==='Marbell'?'🌸':x.person==='Deivis'?'💙':'👩👨🏻'} ${esc(x.location||'')}</small></div>`).join('')}</div>`}h+='</div>';box.innerHTML=h;box.querySelector('#mealPrev').onclick=()=>{m--;if(m<0){m=11;y--}window.__mealM=m;window.__mealY=y;renderCalendar()};box.querySelector('#mealNext').onclick=()=>{m++;if(m>11){m=0;y++}window.__mealM=m;window.__mealY=y;renderCalendar()}}
+function addStyles(){if(document.querySelector('#mealCalendarStyles'))return;const s=document.createElement('style');s.id='mealCalendarStyles';s.textContent=`.calendar-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}.calendar-head h2{text-transform:capitalize;margin:0}.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}.weekdays{text-align:center;color:#a06f80;margin-bottom:7px}.cal-day{min-height:92px;background:#fff7fa;border:1px solid #f1dfe6;border-radius:12px;padding:7px;overflow:hidden}.empty-day{background:transparent;border:none}.cal-meal{font-size:11px;margin-top:5px;padding:4px;background:#fff;border-radius:7px;overflow:hidden}.cal-meal small{display:block;color:#9b7c87;margin-top:2px}@media(max-width:600px){.cal-day{min-height:70px;padding:4px}.cal-meal{font-size:9px;padding:3px}.calendar-grid{gap:3px}}`;document.head.appendChild(s)}
+document.addEventListener('DOMContentLoaded',()=>{addStyles();const a=document.querySelector('#addRecipe');if(a)a.onclick=openRecipe;const c=document.querySelector('[data-screen="comidas"]');if(c)c.addEventListener('click',()=>setTimeout(renderCalendar,150));setTimeout(()=>{if(document.querySelector('#comidas.screen.active'))renderCalendar()},1000)});
 })();
