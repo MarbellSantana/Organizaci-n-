@@ -1,13 +1,14 @@
-/* Mejoras de Organización: compras por categoría + gastos + servicios */
+/* Mejoras de Organización: compras por categoría + gastos + servicios + registro de comidas */
 (function(){
   const categories=[
     ['frutas','🍎 Frutas'],['verduras','🥦 Verduras'],['carnes','🥩 Carnes'],['lacteos','🥛 Lácteos'],
     ['almacen','🥫 Almacén'],['congelados','🧊 Congelados'],['bebidas','🥤 Bebidas'],['limpieza','🧹 Limpieza'],['higiene','🧴 Higiene'],['otros','📦 Otros']
   ];
   let expenseData={services:[],personal:[]}, expenseTab='services';
+  let mealLogData=[], mealPerson='todos';
   const esc2=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
   const money2=n=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(Number(n)||0);
-  const toast2=t=>window.toast?tost(t):document.querySelector('#toast')&&(document.querySelector('#toast').textContent=t,document.querySelector('#toast').style.display='block',setTimeout(()=>document.querySelector('#toast').style.display='none',2200));
+  const toast2=t=>window.toast?window.toast(t):document.querySelector('#toast')&&(document.querySelector('#toast').textContent=t,document.querySelector('#toast').style.display='block',setTimeout(()=>document.querySelector('#toast').style.display='none',2200));
   function toastSafe(t){if(window.toast)window.toast(t);else{const e=document.querySelector('#toast');if(e){e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2200)}}}
   function currentMonth(){return new Date().toISOString().slice(0,7)+'-01'}
   function openBuyEnhanced(){
@@ -23,9 +24,7 @@
     const name=document.querySelector('#fName').value.trim(); if(!name)return toastSafe('Escribe un producto');
     const row={name,category:document.querySelector('#fCategory').value,quantity:document.querySelector('#fQty').value.trim(),estimated_price:Number(document.querySelector('#fPrice').value)||0};
     let r=await db.from('shopping_items').insert(row).select().single();
-    if(r.error && /category/i.test(r.error.message)){
-      delete row.category; r=await db.from('shopping_items').insert(row).select().single();
-    }
+    if(r.error && /category/i.test(r.error.message)){delete row.category; r=await db.from('shopping_items').insert(row).select().single();}
     if(r.error)return toastSafe(r.error.message);
     data.buys.unshift(r.data);closeModal();renderBuysEnhanced();renderBudget();stats();toastSafe('Agregado a '+(categories.find(c=>c[0]===row.category)?.[1]||'compras')+' ♡');
   }
@@ -66,10 +65,26 @@
   window.savePersonalExpense=savePersonalExpense;
   async function deleteExpense(id,type){if(!db)return;const r=await db.from(type==='services'?'services':'expenses').delete().eq('id',id);if(r.error)return toastSafe(r.error.message);if(type==='services')expenseData.services=expenseData.services.filter(x=>x.id!==id);else expenseData.personal=expenseData.personal.filter(x=>x.id!==id);renderExpenses();toastSafe('Gasto eliminado');}
   window.deleteExpense=deleteExpense;
+
+  // Registro de comidas: permite guardar qué preparaste para Marbell y para Deivis por separado.
+  function localISODate(d=new Date()){const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)}
+  function mealLocation(date,type){const day=new Date(date+'T12:00:00').getDay();if(type==='cena'&&(day===2||day===5))return 'Mamá';if(type==='almuerzo'&&day===3)return 'Mamá';return 'Casa'}
+  async function loadMealLog(){if(!db)return;const r=await db.from('meal_log').select('*').order('meal_date',{ascending:false}).order('meal_type');if(!r.error)mealLogData=r.data||[];renderMealLog()}
+  function renderMealLog(){const e=document.querySelector('#mealLogList');if(!e)return;const list=mealPerson==='todos'?mealLogData:mealLogData.filter(x=>x.person===mealPerson);const labels={desayuno:'☀️ Desayuno',almuerzo:'🍝 Almuerzo',merienda:'🥪 Merienda',cena:'🌙 Cena'};e.innerHTML=list.length?list.map(x=>`<div class="item"><div><b>${labels[x.meal_type]||x.meal_type} · ${esc2(x.meal_name)}</b><small>${esc2(x.person)} · ${x.meal_date}${x.location?' · '+esc2(x.location):''}${x.notes?' · '+esc2(x.notes):''}</small></div><button type="button" class="secondary" onclick="deleteMealLog('${x.id}')">Eliminar</button></div>`).join(''):'<div class="empty">Todavía no registraste comidas. 🌸</div>'}
+  function openMealLog(){const today=localISODate();modal(`<h2>Registrar comida 🍽️</h2><p>Guarda lo que hiciste para cada uno. Puedes registrar una comida distinta para Marbell y para Deivis.</p><div class="field"><label>FECHA</label><input id="mlDate" type="date" value="${today}" onchange="updateMealLocationHint()"></div><div class="field"><label>COMIDA</label><select id="mlType" onchange="updateMealLocationHint()"><option value="desayuno">☀️ Desayuno</option><option value="almuerzo">🍝 Almuerzo</option><option value="merienda">🥪 Merienda</option><option value="cena">🌙 Cena</option></select></div><div class="field"><label>¿PARA QUIÉN?</label><select id="mlPerson"><option value="Marbell">🌸 Marbell</option><option value="Deivis">💙 Deivis</option></select></div><div class="field"><label>¿QUÉ HICISTE?</label><input id="mlName" placeholder="Ej. pollo con arroz"></div><div class="field"><label>DÓNDE</label><select id="mlLocation"><option>Casa</option><option>Mamá</option><option>Otro</option></select><small id="mlHint"></small></div><div class="field"><label>NOTA</label><input id="mlNotes" placeholder="Opcional"></div><button type="button" class="primary full" onclick="saveMealLog()">Guardar comida</button>`);updateMealLocationHint()}
+  function updateMealLocationHint(){const d=document.querySelector('#mlDate')?.value,t=document.querySelector('#mlType')?.value,loc=document.querySelector('#mlLocation');if(!d||!t||!loc)return;const suggested=mealLocation(d,t);loc.value=suggested;const hint=document.querySelector('#mlHint');if(hint)hint.textContent=suggested==='Mamá'?'La app lo sugiere porque ese día normalmente comes allí. 💗':''}
+  window.updateMealLocationHint=updateMealLocationHint;
+  async function saveMealLog(){if(!db)return toastSafe('Supabase no está disponible');const date=document.querySelector('#mlDate').value,type=document.querySelector('#mlType').value,person=document.querySelector('#mlPerson').value,name=document.querySelector('#mlName').value.trim(),location=document.querySelector('#mlLocation').value,notes=document.querySelector('#mlNotes').value.trim()||null;if(!name)return toastSafe('Escribe qué comida hiciste');const r=await db.from('meal_log').insert({meal_date:date,meal_type:type,person,meal_name:name,location,notes}).select().single();if(r.error)return toastSafe(r.error.message);mealLogData.unshift(r.data);closeModal();renderMealLog();toastSafe(`Comida guardada para ${person} 🍽️`)}
+  window.saveMealLog=saveMealLog;
+  async function deleteMealLog(id){if(!db)return;const r=await db.from('meal_log').delete().eq('id',id);if(r.error)return toastSafe(r.error.message);mealLogData=mealLogData.filter(x=>x.id!==id);renderMealLog();toastSafe('Comida eliminada')}
+  window.deleteMealLog=deleteMealLog;
+
   document.addEventListener('DOMContentLoaded',()=>{
     const buy=document.querySelector('#addBuy');if(buy)buy.onclick=openBuyEnhanced;
     const expense=document.querySelector('#addExpense');if(expense)expense.onclick=openExpense;
+    const meal=document.querySelector('#addMealLog');if(meal)meal.onclick=openMealLog;
     document.addEventListener('click',e=>{const b=e.target.closest('[data-exp-tab]');if(!b)return;expenseTab=b.dataset.expTab;document.querySelectorAll('[data-exp-tab]').forEach(x=>x.classList.toggle('active',x===b));renderExpenses();});
-    setTimeout(()=>{renderBuysEnhanced();loadExpenses();},900);
+    document.addEventListener('click',e=>{const b=e.target.closest('[data-meal-person]');if(!b)return;mealPerson=b.dataset.mealPerson;document.querySelectorAll('[data-meal-person]').forEach(x=>x.classList.toggle('active',x===b));renderMealLog();});
+    setTimeout(()=>{renderBuysEnhanced();loadExpenses();loadMealLog();},900);
   });
 })();
