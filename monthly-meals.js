@@ -3,116 +3,153 @@
   const $=s=>document.querySelector(s);
   const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
   const db=()=>window.supabase?.createClient?.(SB,KEY);
+  const labels={desayuno:['☀️','Desayuno'],almuerzo:['🍝','Almuerzo'],merienda:['🥪','Merienda'],cena:['🌙','Cena']};
+  let currentMonth=new Date().getMonth();
+  let currentYear=new Date().getFullYear();
+  let person='todos';
 
-  function renderShell(){
-    const hub=$('#casaHub');
-    if(!hub || $('#casaRecentMeals')) return;
-
-    const box=document.createElement('section');
-    box.id='casaRecentMeals';
-    box.className='casa-recent-meals';
-    box.innerHTML=`
-      <div class="casa-recent-head">
-        <div>
-          <span class="casa-recent-kicker">COMIDAS</span>
-          <h2>🍽️ Últimas comidas</h2>
-          <p>Un vistazo rápido a lo que han comido. Para ver todo, entra en <b>Comidas</b>.</p>
-        </div>
-        <button id="casaMealsLink" class="casa-recent-link" type="button">Ver todas →</button>
-      </div>
-      <div id="casaRecentList" class="casa-recent-list"></div>`;
-
-    hub.appendChild(box);
-    $('#casaMealsLink').onclick=()=>window.showScreen?.('comidas');
-    load();
+  function removeOldCasa(){
+    const old=$('#casaRecentMeals');
+    if(old) old.remove();
   }
 
-  async function load(){
-    const list=$('#casaRecentList');
-    if(!list) return;
-    const client=db();
-    if(!client){
-      list.innerHTML='<div class="casa-recent-empty">No se pudo cargar el historial.</div>';
-      return;
+  function addMonthTab(){
+    const sec=$('#comidas');
+    if(!sec) return;
+    const tabs=sec.querySelector('.meal-log-tabs');
+    if(!tabs) return;
+    if(!tabs.querySelector('[data-meal-person="mes"]')){
+      const b=document.createElement('button');
+      b.type='button';
+      b.dataset.mealPerson='mes';
+      b.textContent='📆 Mes';
+      tabs.appendChild(b);
+      b.onclick=()=>showMonth();
     }
-
-    const r=await client.from('meal_log').select('*').order('meal_date',{ascending:false}).order('created_at',{ascending:false}).limit(5);
-    if(r.error){
-      list.innerHTML='<div class="casa-recent-empty">No pudimos cargar las comidas.</div>';
-      return;
+    if(!tabs.querySelector('[data-meal-person="todos"]')?.dataset.boundMonthTabs){
+      tabs.querySelectorAll('button').forEach(b=>{
+        if(b.dataset.mealPerson==='mes') return;
+        b.dataset.boundMonthTabs='1';
+        b.addEventListener('click',()=>{
+          person=b.dataset.mealPerson||'todos';
+          const view=$('#monthMealsView');
+          if(view) view.remove();
+        });
+      });
     }
+  }
 
-    const rows=r.data||[];
-    const labels={
-      desayuno:{icon:'☀️',name:'Desayuno'},
-      almuerzo:{icon:'🍝',name:'Almuerzo'},
-      merienda:{icon:'🥪',name:'Merienda'},
-      cena:{icon:'🌙',name:'Cena'}
-    };
-
-    if(!rows.length){
-      list.innerHTML='<div class="casa-recent-empty"><span>🍽️</span><div><b>Aún no hay comidas registradas</b><small>Cuando agreguen una comida, aparecerá aquí.</small></div></div>';
-      return;
+  function showMonth(){
+    const sec=$('#comidas'); if(!sec) return;
+    const tabs=sec.querySelector('.meal-log-tabs');
+    tabs?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.mealPerson==='mes'));
+    const list=$('#mealLogList'); if(list) list.style.display='none';
+    let view=$('#monthMealsView');
+    if(!view){
+      view=document.createElement('div');
+      view.id='monthMealsView';
+      view.className='month-meals-view';
+      sec.querySelector('.panel')?.appendChild(view);
     }
-
-    list.innerHTML=rows.map(x=>{
-      const meal=labels[x.meal_type]||{icon:'🍽️',name:x.meal_type||'Comida'};
-      const date=x.meal_date?new Date(x.meal_date+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'short'}):'';
-      const person=x.person==='Marbell'?'🌸 Marbell':x.person==='Deivis'?'💙 Deivis':'👩‍❤️‍👨 Los dos';
-      return `<article class="casa-recent-item">
-        <div class="casa-recent-icon">${meal.icon}</div>
-        <div class="casa-recent-info">
-          <div class="casa-recent-top"><b>${esc(meal.name)}</b><span>${esc(date)}</span></div>
-          <strong>${esc(x.meal_name||'Sin nombre')}</strong>
-          <small>${person}${x.location?` · 📍 ${esc(x.location)}`:''}</small>
+    view.innerHTML=`
+      <div class="month-meals-head">
+        <div>
+          <span>HISTORIAL</span>
+          <h2>📆 Comidas del mes</h2>
+          <p>Visualiza todo lo que han comido, ordenado por día.</p>
         </div>
-      </article>`;
+        <div class="month-controls">
+          <button type="button" id="monthPrev">‹</button>
+          <strong id="monthLabel"></strong>
+          <button type="button" id="monthNext">›</button>
+        </div>
+      </div>
+      <div class="month-filter">
+        <button type="button" class="active" data-month-person="todos">Todos</button>
+        <button type="button" data-month-person="Marbell">🌸 Marbell</button>
+        <button type="button" data-month-person="Deivis">💙 Deivis</button>
+        <button type="button" data-month-person="Los dos">👩👨🏻 Los dos</button>
+      </div>
+      <div id="monthMealsList"></div>`;
+    $('#monthPrev').onclick=()=>{currentMonth--;if(currentMonth<0){currentMonth=11;currentYear--;}loadMonth()};
+    $('#monthNext').onclick=()=>{currentMonth++;if(currentMonth>11){currentMonth=0;currentYear++;}loadMonth()};
+    view.querySelectorAll('[data-month-person]').forEach(b=>b.onclick=()=>{view.querySelectorAll('[data-month-person]').forEach(x=>x.classList.remove('active'));b.classList.add('active');person=b.dataset.monthPerson;loadMonth()});
+    loadMonth();
+  }
+
+  async function loadMonth(){
+    const list=$('#monthMealsList'), label=$('#monthLabel');
+    if(!list||!label)return;
+    const monthName=new Intl.DateTimeFormat('es-AR',{month:'long',year:'numeric'}).format(new Date(currentYear,currentMonth,1));
+    label.textContent=monthName.charAt(0).toUpperCase()+monthName.slice(1);
+    list.innerHTML='<div class="month-loading">Cargando comidas…</div>';
+    const start=`${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+    const endDate=new Date(currentYear,currentMonth+1,0).getDate();
+    const end=`${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(endDate).padStart(2,'0')}`;
+    const client=db();
+    if(!client){list.innerHTML='<div class="empty">No se pudo conectar con las comidas.</div>';return;}
+    let q=client.from('meal_log').select('*').gte('meal_date',start).lte('meal_date',end).order('meal_date',{ascending:false}).order('meal_type');
+    if(person!=='todos') q=q.eq('person',person);
+    const r=await q;
+    if(r.error){list.innerHTML='<div class="empty">No pudimos cargar el historial.</div>';return;}
+    const rows=r.data||[];
+    if(!rows.length){list.innerHTML='<div class="month-empty"><span>🍽️</span><b>No hay comidas registradas este mes</b><small>Cuando registres comidas aparecerán aquí.</small></div>';return;}
+    const groups={};
+    rows.forEach(x=>(groups[x.meal_date]??=[]).push(x));
+    list.innerHTML=Object.keys(groups).sort((a,b)=>b.localeCompare(a)).map(date=>{
+      const d=new Date(date+'T12:00:00');
+      const day=new Intl.DateTimeFormat('es-AR',{weekday:'long',day:'numeric',month:'long'}).format(d);
+      return `<section class="month-day"><h3>${day.charAt(0).toUpperCase()+day.slice(1)}</h3><div class="month-day-meals">${groups[date].map(x=>{const l=labels[x.meal_type]||['🍽️','Comida'];return `<article><span class="month-meal-icon">${l[0]}</span><div><b>${l[1]}</b><strong>${esc(x.meal_name||'Sin nombre')}</strong><small>${x.person==='Marbell'?'🌸 Marbell':x.person==='Deivis'?'💙 Deivis':'👩👨🏻 Los dos'}${x.location?' · 📍 '+esc(x.location):''}</small></div></article>`}).join('')}</div></section>`;
     }).join('');
   }
 
+  function restoreList(){
+    const list=$('#mealLogList');
+    if(list) list.style.display='';
+    $('#monthMealsView')?.remove();
+    const tabs=$('#comidas .meal-log-tabs');
+    tabs?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.mealPerson===person));
+  }
+
   function style(){
-    if($('#casaRecentMealStyles')) return;
-    const s=document.createElement('style');
-    s.id='casaRecentMealStyles';
-    s.textContent=`
-      .casa-recent-meals{margin-top:24px;background:#fff;border:1px solid #f0dfe5;border-radius:24px;padding:22px;box-shadow:0 8px 25px rgba(160,100,130,.06)}
-      .casa-recent-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:16px}
-      .casa-recent-kicker{font-size:11px;letter-spacing:1.5px;font-weight:800;color:#c47792}
-      .casa-recent-head h2{margin:4px 0 3px;color:#513c46;font-size:22px}
-      .casa-recent-head p{margin:0;color:#987a85;font-size:13px;line-height:1.45}
-      .casa-recent-link{border:0;background:#fff0f5;color:#b96782;border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer;white-space:nowrap}
-      .casa-recent-list{display:grid;gap:9px}
-      .casa-recent-item{display:flex;align-items:center;gap:12px;background:#fff8fa;border:1px solid #f2e3e8;border-radius:15px;padding:12px 14px}
-      .casa-recent-icon{width:38px;height:38px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:19px;flex:0 0 auto}
-      .casa-recent-info{min-width:0;flex:1}
-      .casa-recent-top{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:2px}
-      .casa-recent-top b{font-size:12px;color:#c47792}
-      .casa-recent-top span{font-size:11px;color:#aa9099;white-space:nowrap;text-transform:capitalize}
-      .casa-recent-info>strong{display:block;color:#513c46;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .casa-recent-info small{display:block;color:#987a85;font-size:11px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .casa-recent-empty{display:flex;align-items:center;gap:12px;padding:18px;background:#fff8fa;border:1px dashed #efdce4;border-radius:15px;color:#6d5360}
-      .casa-recent-empty>span{font-size:24px}
-      .casa-recent-empty b,.casa-recent-empty small{display:block}
-      .casa-recent-empty small{color:#987a85;margin-top:3px}
-      @media(max-width:600px){
-        .casa-recent-meals{padding:17px;border-radius:20px}
-        .casa-recent-head{display:block}
-        .casa-recent-link{margin-top:12px}
-        .casa-recent-item{padding:10px}
-      }
-    `;
-    document.head.appendChild(s);
+    if($('#monthMealStyles'))return;
+    const s=document.createElement('style');s.id='monthMealStyles';s.textContent=`
+      .month-meals-view{margin-top:18px}
+      .month-meals-head{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:18px}
+      .month-meals-head span{font-size:11px;letter-spacing:1.5px;font-weight:800;color:#c47792}
+      .month-meals-head h2{margin:4px 0;color:#513c46;font-size:24px}
+      .month-meals-head p{margin:0;color:#987a85;font-size:13px}
+      .month-controls{display:flex;align-items:center;gap:12px;background:#fff8fa;border:1px solid #f0dfe5;border-radius:16px;padding:5px}
+      .month-controls button{width:40px;height:40px;border:0;border-radius:11px;background:#fff;color:#b96782;font-size:25px;cursor:pointer}
+      .month-controls strong{min-width:135px;text-align:center;color:#513c46;text-transform:capitalize}
+      .month-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+      .month-filter button{border:1px solid #f0dfe5;background:#fff;border-radius:13px;padding:9px 13px;color:#6d5360;font-weight:700;cursor:pointer}
+      .month-filter button.active{background:#df8fac;color:#fff;border-color:#df8fac}
+      .month-day{border:1px solid #f0dfe5;border-radius:18px;padding:15px;margin:10px 0;background:#fff}
+      .month-day h3{margin:0 0 10px;color:#513c46;font-size:16px;text-transform:capitalize}
+      .month-day-meals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+      .month-day-meals article{display:flex;gap:10px;align-items:center;background:#fff8fa;border-radius:14px;padding:11px}
+      .month-meal-icon{font-size:21px}
+      .month-day-meals article div{min-width:0}
+      .month-day-meals b,.month-day-meals strong,.month-day-meals small{display:block}
+      .month-day-meals b{font-size:11px;color:#c47792}
+      .month-day-meals strong{font-size:14px;color:#513c46;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .month-day-meals small{font-size:10px;color:#987a85;margin-top:2px}
+      .month-empty,.month-loading{padding:28px;text-align:center;color:#6d5360;background:#fff8fa;border:1px dashed #efdce4;border-radius:16px}
+      .month-empty span{display:block;font-size:28px;margin-bottom:6px}.month-empty b,.month-empty small{display:block}.month-empty small{color:#987a85;margin-top:3px}
+      @media(max-width:650px){.month-meals-head{display:block}.month-controls{margin-top:14px;justify-content:space-between}.month-day-meals{grid-template-columns:1fr}.month-controls strong{min-width:0;flex:1}}
+    `;document.head.appendChild(s)
   }
 
   function boot(){
+    removeOldCasa();
     style();
-    renderShell();
+    addMonthTab();
     const obs=new MutationObserver(()=>{
-      if($('#casa')?.classList.contains('active')) renderShell();
+      removeOldCasa();
+      if($('#comidas')?.classList.contains('active')) addMonthTab();
     });
     obs.observe(document.body,{attributes:true,attributeFilter:['class'],subtree:true});
   }
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,900));
-  else setTimeout(boot,900);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,900));else setTimeout(boot,900);
 })();
